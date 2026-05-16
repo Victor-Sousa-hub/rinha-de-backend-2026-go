@@ -8,10 +8,12 @@ import (
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/scoring"
 )
 
-type FraudHandler struct{}
+type FraudHandler struct {
+	knn *scoring.KNN
+}
 
-func NewFraudHandler() *FraudHandler {
-	return &FraudHandler{}
+func NewFraudHandler(knn *scoring.KNN) *FraudHandler {
+	return &FraudHandler{knn: knn}
 }
 
 func (h *FraudHandler) Score(w http.ResponseWriter, r *http.Request) {
@@ -34,15 +36,11 @@ func (h *FraudHandler) Score(w http.ResponseWriter, r *http.Request) {
 		req.LastTransaction = &model.LastTransaction{KmFromCurrent: -1}
 	}
 
-	score := calcFraudScore(&req)
+	v := scoring.Vectorize(&req)
+	score := h.knn.Score(v)
 
 	respond(w, http.StatusOK, model.FraudScoreResponse{
 		Approved:   score < 0.7,
 		FraudScore: score,
 	})
-}
-
-func calcFraudScore(req *model.FraudScoreRequest) float64 {
-	_ = scoring.Vectorize(req)
-	return 0.0 // KNN ainda não implementado
 }
