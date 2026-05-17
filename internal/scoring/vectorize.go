@@ -1,7 +1,6 @@
 package scoring
 
 import (
-	_ "embed"
 	"encoding/json"
 	"math"
 
@@ -19,13 +18,14 @@ const (
 	defaultMCCRisk       = 0.5
 )
 
-//go:embed mcc_risk.json
-var mccRiskJSON []byte
-
 var mccRisk map[string]float64
 
-func init() {
-	json.Unmarshal(mccRiskJSON, &mccRisk)
+// LoadMCCRisk substitui o antigo init() com embed local.
+// Função explícita em vez de init() porque init() roda antes de main()
+// e não pode receber dados injetados de fora do pacote — o embed precisa
+// estar no pacote que contém o arquivo físico (ver comentário em main.go).
+func LoadMCCRisk(data []byte) error {
+	return json.Unmarshal(data, &mccRisk)
 }
 
 func clamp(v float64) float64 {
