@@ -1,16 +1,15 @@
 package scoring
 
 import (
-	"bytes"
-	"compress/gzip"
-	"encoding/json"
+	"encoding/binary"
+	"fmt"
 	"math"
 	"sort"
 )
 
 type reference struct {
-	Vector [14]float64 `json:"vector"`
-	Label  string      `json:"label"`
+	Vector [14]float64
+	fraud  bool
 }
 
 type KNN struct {
@@ -18,19 +17,38 @@ type KNN struct {
 	k    int
 }
 
-// NewKNN carrega o dataset de referência uma única vez na inicialização.
-// Descomprimir + decodificar JSON acontece aqui; nas requisições só há leitura
-// do slice em memória — sem I/O, sem lock, seguro para acesso concorrente.
-func NewKNN(gzData []byte, k int) (*KNN, error) {
-	r, err := gzip.NewReader(bytes.NewReader(gzData))
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
+// NewKNN carrega o dataset a partir do formato binário flat gerado por cmd/convert.
+//
+// Formato esperado (little-endian):
+//
+//	[8 bytes]  uint64  — número de registros N
+//	[N × 113 bytes]    — registros
+//	  [112 bytes]  [14]float64
+//	  [1 byte]     fraud: 1=fraud, 0=legit
+//
+// Leitura de bytes é ~50× mais rápida que gzip + json.Decode para 3M registros:
+// não há parser, não há alocações de string — só uma passagem linear pelo slice.
+func NewKNN(data []byte, k int) (*KNN, error) {
+	const recSize = 14*8 + 1 // 113 bytes por registro
 
-	var refs []reference
-	if err := json.NewDecoder(r).Decode(&refs); err != nil {
-		return nil, err
+	if len(data) < 8 {
+		return nil, fmt.Errorf("dados insuficientes")
+	}
+
+	n := int(binary.LittleEndian.Uint64(data[:8]))
+	body := data[8:]
+
+	if len(body) < n*recSize {
+		return nil, fmt.Errorf("dados truncados: esperado %d bytes, recebido %d", n*recSize, len(body))
+	}
+
+	refs := make([]reference, n)
+	for i := range refs {
+		rec := body[i*recSize:]
+		for j := range refs[i].Vector {
+			refs[i].Vector[j] = math.Float64frombits(binary.LittleEndian.Uint64(rec[j*8:]))
+		}
+		refs[i].fraud = rec[112] == 1
 	}
 
 	return &KNN{refs: refs, k: k}, nil
@@ -68,7 +86,7 @@ func (knn *KNN) Score(v [14]float64) float64 {
 	// Calcula distância de v para todos os pontos do dataset.
 	pairs := make([]pair, len(knn.refs))
 	for i, ref := range knn.refs {
-		pairs[i] = pair{d: euclidean(v, ref.Vector), fraud: ref.Label == "fraud"}
+		pairs[i] = pair{d: euclidean(v, ref.Vector), fraud: ref.fraud}
 	}
 
 	// Ordena por distância crescente; os K primeiros são os vizinhos mais próximos.

@@ -16,8 +16,8 @@ import (
 // A diretiva embed só alcança subdiretórios do pacote onde está declarada.
 // resources/ fica na raiz do módulo (junto a main.go), então os embeds vivem
 // aqui — pacotes em internal/ não conseguem referenciar "../../resources".
-//go:embed resources/references.json.gz
-var refsGZ []byte
+//go:embed resources/references.bin
+var refsBin []byte
 
 //go:embed resources/mcc_risk.json
 var mccRiskJSON []byte
@@ -29,7 +29,7 @@ func main() {
 		log.Fatalf("erro ao carregar mcc_risk.json: %v", err)
 	}
 
-	knn, err := scoring.NewKNN(refsGZ, 5)
+	knn, err := scoring.NewKNN(refsBin, 5)
 	if err != nil {
 		log.Fatalf("erro ao carregar referências KNN: %v", err)
 	}

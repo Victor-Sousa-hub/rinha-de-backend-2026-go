@@ -8,6 +8,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+# Converte references.json.gz → references.bin (binário flat, sem parser JSON).
+# Isso acontece uma vez no build; o binário final embute o .bin já convertido.
+RUN go run cmd/convert/main.go
 # CGO_ENABLED=0 garante binário estático — sem dependência de libc no container final.
 # GOARCH=amd64 exigido pela spec da Rinha (linux/amd64).
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o api .

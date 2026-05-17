@@ -3,6 +3,11 @@ REQUESTS    ?= 200
 
 # ── Desenvolvimento local ──────────────────────────────────────────────────────
 
+# Gera resources/references.bin a partir do references.json.gz.
+# Executar uma vez antes de `make run` ou `make up`.
+convert:
+	go run cmd/convert/main.go
+
 run:
 	air
 
