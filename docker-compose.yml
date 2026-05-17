@@ -35,9 +35,13 @@ services:
     ports:
       # 9999 é a porta obrigatória da Rinha exposta ao avaliador.
       - "9999:9999"
+    # condition: service_healthy faz o nginx esperar o HEALTHCHECK das APIs passar
+    # antes de iniciar — evita o erro "host not found in upstream" na resolução DNS.
     depends_on:
-      - api1
-      - api2
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
     networks:
       - backend
     deploy:

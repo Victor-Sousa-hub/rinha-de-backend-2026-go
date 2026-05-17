@@ -13,10 +13,16 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o api .
 
 # --- final stage ---
-# scratch = imagem vazia; só o binário vai para o container, sem shell, sem libs.
-FROM scratch
+# alpine em vez de scratch para ter wget disponível no HEALTHCHECK.
+# scratch seria menor, mas o Docker não consegue executar o probe sem shell/binários.
+FROM alpine
 
 COPY --from=builder /app/api /api
+
+# O Docker executa esse probe periodicamente; falha 3x consecutivas → container unhealthy.
+# O nginx só inicia após api1 e api2 ficarem healthy (ver docker-compose.yml).
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:9999/ready || exit 1
 
 EXPOSE 9999
 ENTRYPOINT ["/api"]
