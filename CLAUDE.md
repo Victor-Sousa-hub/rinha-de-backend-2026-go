@@ -59,24 +59,6 @@ Cada participante deve construir uma API que, dado o payload de uma transação,
 }
 ```
 
-### Response modo verboso (`?verbose=true`)
-
-Ativa o modo verboso: retorna os K vizinhos usados no cálculo além do score.
-
-```json
-{
-  "approved": true,
-  "fraud_score": 0.2,
-  "neighbors": [
-    { "distance": 0.031, "label": "legit" },
-    { "distance": 0.045, "label": "legit" },
-    { "distance": 0.061, "label": "legit" },
-    { "distance": 0.078, "label": "fraud" },
-    { "distance": 0.091, "label": "legit" }
-  ]
-}
-```
-
 ---
 
 ## Lógica de Detecção
@@ -175,14 +157,6 @@ make test           # testes unitários
 make test-payloads  # dispara 40 payloads de exemplo contra :9999
 ```
 
-### Testando modo verboso
-
-```bash
-curl -s -X POST http://localhost:9999/fraud-score?verbose=true \
-  -H 'Content-Type: application/json' \
-  -d @resources/example-payloads.json | jq '.[0]'
-```
-
 ---
 
 ## Estrutura
@@ -191,11 +165,11 @@ curl -s -X POST http://localhost:9999/fraud-score?verbose=true \
 .
 ├── main.go                         # entrypoint, rotas, embed do dataset
 ├── internal/
-│   ├── handler/fraud.go            # POST /fraud-score (inclui modo verbose)
+│   ├── handler/fraud.go            # POST /fraud-score
 │   ├── model/fraud.go              # structs + validação de entrada
 │   └── scoring/
 │       ├── vectorize.go            # normalização → vetor [14]float64
-│       ├── knn.go                  # KNN brute-force + ScoreVerbose
+│       ├── knn.go                  # KNN brute-force
 └── resources/
     ├── references.json.gz          # dataset de referência (embutido)
     ├── mcc_risk.json               # risco por MCC — embed em main.go
