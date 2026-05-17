@@ -31,10 +31,13 @@ type FraudHandler struct {
 	queueCap int
 }
 
+// NewFraudHandler cria o pool e já dispara as goroutines workers.
+// As goroutines ficam vivas para sempre lendo da queue — Go não tem thread pool
+// nativo, então criamos o nosso: número fixo de goroutines em loop infinito.
 func NewFraudHandler(knn *scoring.KNN, workers, queueCap int) *FraudHandler {
 	h := &FraudHandler{
 		knn:      knn,
-		queue:    make(chan job, queueCap),
+		queue:    make(chan job, queueCap), // buffer = queueCap slots antes de bloquear
 		workers:  workers,
 		queueCap: queueCap,
 	}
@@ -44,6 +47,11 @@ func NewFraudHandler(knn *scoring.KNN, workers, queueCap int) *FraudHandler {
 	return h
 }
 
+// runWorker é o loop de cada goroutine do pool.
+// `for j := range h.queue` bloqueia enquanto a fila está vazia e para
+// automaticamente se o canal for fechado (não acontece aqui, mas é o padrão Go).
+// Cada iteração processa um job: calcula o score e devolve pelo canal j.done,
+// que desbloqueia a goroutine HTTP que está esperando a resposta.
 func (h *FraudHandler) runWorker() {
 	for j := range h.queue {
 		n := h.active.Add(1)
