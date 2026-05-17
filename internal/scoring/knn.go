@@ -7,51 +7,38 @@ import (
 	"sort"
 )
 
-type reference struct {
-	Vector [14]float64
-	fraud  bool
-}
-
+// KNN guarda apenas uma referência ao slice de bytes do embed — sem alocar
+// os 324 MB de refs no heap. O OS mantém esses bytes no segmento .rodata do
+// binário; como api1 e api2 rodam a mesma imagem, as páginas são compartilhadas
+// entre os dois processos pelo kernel (CoW, read-only), contando ~uma vez no budget de RAM.
 type KNN struct {
-	refs []reference
+	data []byte // binário flat: [8 bytes N] + [N × 113 bytes registros]
+	n    int
 	k    int
 }
 
-// NewKNN carrega o dataset a partir do formato binário flat gerado por cmd/convert.
-//
-// Formato esperado (little-endian):
-//
-//	[8 bytes]  uint64  — número de registros N
-//	[N × 113 bytes]    — registros
-//	  [112 bytes]  [14]float64
-//	  [1 byte]     fraud: 1=fraud, 0=legit
-//
-// Leitura de bytes é ~50× mais rápida que gzip + json.Decode para 3M registros:
-// não há parser, não há alocações de string — só uma passagem linear pelo slice.
+// NewKNN valida o cabeçalho e armazena o slice — O(1), sem parsing.
 func NewKNN(data []byte, k int) (*KNN, error) {
-	const recSize = 14*8 + 1 // 113 bytes por registro
-
+	const recSize = 14*8 + 1
 	if len(data) < 8 {
 		return nil, fmt.Errorf("dados insuficientes")
 	}
-
 	n := int(binary.LittleEndian.Uint64(data[:8]))
-	body := data[8:]
-
-	if len(body) < n*recSize {
-		return nil, fmt.Errorf("dados truncados: esperado %d bytes, recebido %d", n*recSize, len(body))
+	if len(data) < 8+n*recSize {
+		return nil, fmt.Errorf("dados truncados: esperado %d bytes, recebido %d", 8+n*recSize, len(data))
 	}
+	return &KNN{data: data, n: n, k: k}, nil
+}
 
-	refs := make([]reference, n)
-	for i := range refs {
-		rec := body[i*recSize:]
-		for j := range refs[i].Vector {
-			refs[i].Vector[j] = math.Float64frombits(binary.LittleEndian.Uint64(rec[j*8:]))
-		}
-		refs[i].fraud = rec[112] == 1
+// refAt lê o i-ésimo registro diretamente dos bytes — sem alocação de struct intermediária.
+func (knn *KNN) refAt(i int) ([14]float64, bool) {
+	const recSize = 113
+	rec := knn.data[8+i*recSize:]
+	var vec [14]float64
+	for j := range vec {
+		vec[j] = math.Float64frombits(binary.LittleEndian.Uint64(rec[j*8:]))
 	}
-
-	return &KNN{refs: refs, k: k}, nil
+	return vec, rec[112] == 1
 }
 
 // euclidean distance entre dois vetores de 14 dimensões.
@@ -83,10 +70,12 @@ func (knn *KNN) Score(v [14]float64) float64 {
 		fraud bool
 	}
 
-	// Calcula distância de v para todos os pontos do dataset.
-	pairs := make([]pair, len(knn.refs))
-	for i, ref := range knn.refs {
-		pairs[i] = pair{d: euclidean(v, ref.Vector), fraud: ref.fraud}
+	// pairs é alocado por chamada (~48 MB) e descartado após o return —
+	// o GC coleta entre requisições. É o custo inevitável do brute-force.
+	pairs := make([]pair, knn.n)
+	for i := range pairs {
+		vec, fraud := knn.refAt(i)
+		pairs[i] = pair{d: euclidean(v, vec), fraud: fraud}
 	}
 
 	// Ordena por distância crescente; os K primeiros são os vizinhos mais próximos.
