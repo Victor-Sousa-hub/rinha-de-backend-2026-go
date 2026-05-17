@@ -1,0 +1,52 @@
+name: rinha-2026
+
+services:
+  api1:
+    build: .
+    environment:
+      - WORKERS=2
+      - QUEUE_CAP=64
+    # Sem `ports`: a API não é exposta diretamente — só o nginx chega até ela.
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.45"
+          memory: "150MB"
+
+  api2:
+    build: .
+    environment:
+      - WORKERS=2
+      - QUEUE_CAP=64
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.45"
+          memory: "150MB"
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      # 9999 é a porta obrigatória da Rinha exposta ao avaliador.
+      - "9999:9999"
+    depends_on:
+      - api1
+      - api2
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "50MB"
+
+networks:
+  # bridge é o modo exigido pela spec da Rinha.
+  backend:
+    driver: bridge
