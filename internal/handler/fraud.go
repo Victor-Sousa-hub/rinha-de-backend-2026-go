@@ -11,21 +11,9 @@ import (
 )
 
 type job struct {
-	id      string
-	vector  [14]float64
-	verbose bool
-	done    chan jobResult
-}
-
-type jobResult struct {
-	score     float64
-	neighbors []scoring.Neighbor
-}
-
-type verboseResponse struct {
-	Approved   bool               `json:"approved"`
-	FraudScore float64            `json:"fraud_score"`
-	Neighbors  []scoring.Neighbor `json:"neighbors"`
+	id     string
+	vector [14]float64
+	done   chan float64
 }
 
 // FraudHandler implementa o padrão worker pool:
@@ -61,14 +49,8 @@ func (h *FraudHandler) runWorker() {
 		n := h.active.Add(1)
 		logger.WorkerIn(j.id, n, len(h.queue))
 
-		var res jobResult
-		if j.verbose {
-			res.score, res.neighbors = h.knn.ScoreVerbose(j.vector)
-		} else {
-			res.score = h.knn.Score(j.vector)
-		}
+		j.done <- h.knn.Score(j.vector)
 
-		j.done <- res
 		n = h.active.Add(-1)
 		logger.WorkerOut(j.id, n, len(h.queue))
 	}
@@ -118,14 +100,10 @@ func (h *FraudHandler) Score(w http.ResponseWriter, r *http.Request) {
 		req.LastTransaction = &model.LastTransaction{KmFromCurrent: -1}
 	}
 
-	vector := scoring.Vectorize(&req)
-	verbose := r.URL.Query().Get("verbose") == "true"
-
 	j := job{
-		id:      req.ID,
-		vector:  vector,
-		verbose: verbose,
-		done:    make(chan jobResult, 1),
+		id:     req.ID,
+		vector: scoring.Vectorize(&req),
+		done:   make(chan float64, 1),
 	}
 
 	// select não-bloqueante: se a fila estiver cheia, o caso default executa
@@ -140,19 +118,10 @@ func (h *FraudHandler) Score(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Bloqueia até o worker sinalizar que terminou via j.done (canal com buffer 1).
-	res := <-j.done
-
-	if verbose {
-		respond(w, http.StatusOK, verboseResponse{
-			Approved:   res.score < 0.7,
-			FraudScore: res.score,
-			Neighbors:  res.neighbors,
-		})
-		return
-	}
+	score := <-j.done
 
 	respond(w, http.StatusOK, model.FraudScoreResponse{
-		Approved:   res.score < 0.7,
-		FraudScore: res.score,
+		Approved:   score < 0.7,
+		FraudScore: score,
 	})
 }
