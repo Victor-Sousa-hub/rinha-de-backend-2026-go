@@ -4,8 +4,12 @@ services:
   api1:
     build: .
     environment:
-      - WORKERS=2
+      - WORKERS=8
       - QUEUE_CAP=64
+      # Go detecta 0.45 CPU via cgroup e define GOMAXPROCS=1 por padrão,
+      # serializando toda a execução num único OS thread. Forçar 4 permite
+      # que Score() paralelize seus chunks em threads distintos.
+      - GOMAXPROCS=4
     # Sem `ports`: a API não é exposta diretamente — só o nginx chega até ela.
     networks:
       - backend
@@ -18,8 +22,9 @@ services:
   api2:
     build: .
     environment:
-      - WORKERS=2
+      - WORKERS=8
       - QUEUE_CAP=64
+      - GOMAXPROCS=4
     networks:
       - backend
     deploy:

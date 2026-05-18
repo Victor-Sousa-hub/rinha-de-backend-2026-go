@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"log"
 	"net/http"
+	"runtime"
 
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/config"
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/handler"
@@ -33,6 +34,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("erro ao carregar referências KNN: %v", err)
 	}
+	// refsBin (171 MB) não é mais necessário após a decodificação em NewKNN.
+	// Nulificar aqui permite ao GC coletar o slice antes das primeiras requisições.
+	refsBin = nil
+	runtime.GC()
 
 	r := chi.NewRouter()
 	r.Use(logger.Middleware)

@@ -3,12 +3,12 @@
 // Formato de saída (flat binary, little-endian):
 //
 //	[8 bytes]  uint64  — número de registros N
-//	[N × 113 bytes]    — registros
-//	  [112 bytes]  [14]float64  — vetor de features
-//	  [1 byte]     uint8        — label: 1=fraud, 0=legit
+//	[N × 57 bytes]     — registros
+//	  [56 bytes]  [14]float32  — vetor de features (float32 economiza 50% vs float64)
+//	  [1 byte]    uint8        — label: 1=fraud, 0=legit
 //
-// Ler bytes diretamente é ~50× mais rápido do que fazer gzip + json.Decode,
-// que é o gargalo atual de ~2 minutos no startup da API.
+// float32 é suficiente para features normalizadas em [0,1] com 7 dígitos de precisão.
+// Reduz o arquivo de 324 MB (float64) para ~163 MB, acelerando o build Docker.
 package main
 
 import (
@@ -53,22 +53,21 @@ func main() {
 	}
 	defer out.Close()
 
-	// Buffer de 4 MB para minimizar syscalls de escrita.
 	w := bufio.NewWriterSize(out, 4<<20)
 
 	var hdr [8]byte
 	binary.LittleEndian.PutUint64(hdr[:], uint64(len(refs)))
 	w.Write(hdr[:])
 
-	var rec [113]byte
+	var rec [57]byte // 14×float32 + 1 byte label
 	for _, r := range refs {
-		for i, f := range r.Vector {
-			binary.LittleEndian.PutUint64(rec[i*8:], math.Float64bits(f))
+		for i, f64 := range r.Vector {
+			binary.LittleEndian.PutUint32(rec[i*4:], math.Float32bits(float32(f64)))
 		}
 		if r.Label == "fraud" {
-			rec[112] = 1
+			rec[56] = 1
 		} else {
-			rec[112] = 0
+			rec[56] = 0
 		}
 		w.Write(rec[:])
 	}
@@ -77,5 +76,7 @@ func main() {
 		log.Fatalf("flush: %v", err)
 	}
 
-	log.Printf("OK: %d registros → resources/references.bin em %s", len(refs), time.Since(start))
+	info, _ := out.Stat()
+	log.Printf("OK: %d registros → resources/references.bin (%.0f MB) em %s",
+		len(refs), float64(info.Size())/(1<<20), time.Since(start))
 }
