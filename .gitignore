@@ -2,4 +2,6 @@ tmp/
 bin/
 .env
 resources/references.bin
+test/test-data.json
+test/results.json
 

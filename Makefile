@@ -19,8 +19,11 @@ test:
 
 # ── Docker (load balancer nginx + 2 instâncias) ────────────────────────────────
 
-up:
+docker-build:
 	docker compose up --build -d
+
+up:
+	docker compose up -d
 
 down:
 	docker compose down
@@ -35,3 +38,18 @@ test-payloads:
 
 bench:
 	@CONCURRENCY=$(CONCURRENCY) REQUESTS=$(REQUESTS) bash scripts/bench.sh
+
+# ── Testes oficiais k6 (requer k6 instalado) ──────────────────────────────────
+
+# Baixa o dataset de teste oficial (~26 MB) caso ainda não exista.
+test/test-data.json:
+	@echo "Baixando test-data.json (~26 MB)..."
+	@curl -fL --progress-bar \
+		https://raw.githubusercontent.com/zanfranceschi/rinha-de-backend-2026/main/test/test-data.json \
+		-o test/test-data.json
+
+smoke:
+	k6 run test/smoke.js
+
+test-k6: test/test-data.json
+	k6 run test/test.js

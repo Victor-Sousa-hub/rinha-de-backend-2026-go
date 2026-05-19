@@ -50,17 +50,12 @@ func NewFraudHandler(knn *scoring.KNN, workers, queueCap int) *FraudHandler {
 // runWorker é o loop de cada goroutine do pool.
 // `for j := range h.queue` bloqueia enquanto a fila está vazia e para
 // automaticamente se o canal for fechado (não acontece aqui, mas é o padrão Go).
-// Cada iteração processa um job: calcula o score e devolve pelo canal j.done,
-// que desbloqueia a goroutine HTTP que está esperando a resposta.
+// Sem logging no hot path — 900 req/s implicariam ~1800 formatações ANSI/s.
 func (h *FraudHandler) runWorker() {
 	for j := range h.queue {
-		n := h.active.Add(1)
-		logger.WorkerIn(j.id, n, len(h.queue))
-
+		h.active.Add(1)
 		j.done <- h.knn.Score(j.vector)
-
-		n = h.active.Add(-1)
-		logger.WorkerOut(j.id, n, len(h.queue))
+		h.active.Add(-1)
 	}
 }
 
@@ -118,7 +113,6 @@ func (h *FraudHandler) Score(w http.ResponseWriter, r *http.Request) {
 	// imediatamente e o cliente recebe 503 em vez de ficar pendurado.
 	select {
 	case h.queue <- j:
-		logger.Enqueue(req.ID, len(h.queue))
 	default:
 		logger.Reject(req.ID, h.queueCap)
 		respond(w, http.StatusServiceUnavailable, map[string]string{"error": "serviço sobrecarregado"})
