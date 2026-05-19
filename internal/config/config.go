@@ -8,19 +8,17 @@ import (
 )
 
 type Config struct {
-	Addr     string
-	Workers  int
-	QueueCap int
-	Nprobe   int
+	Addr    string
+	Workers int
+	Nprobe  int
 }
 
 func Load() Config {
 	loadDotEnv(".env")
 	return Config{
-		Addr:     str("ADDR", ":9999"),
-		Workers:  pos("WORKERS", 2),
-		QueueCap: pos("QUEUE_CAP", 64),
-		Nprobe:   pos("NPROBE", 2),
+		Addr:    str("ADDR", ":9999"),
+		Workers: pos("WORKERS", 2),
+		Nprobe:  pos("NPROBE", 2),
 	}
 }
 

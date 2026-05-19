@@ -43,10 +43,10 @@ func main() {
 	r.Use(logger.Middleware)
 	r.Use(middleware.Recoverer)
 
-	fraud := handler.NewFraudHandler(knn, cfg.Workers, cfg.QueueCap)
+	fraud := handler.NewFraudHandler(knn, cfg.Workers)
 	r.Get("/ready", fraud.Ready)
 	r.Post("/fraud-score", fraud.Score)
 
-	logger.Startup(cfg.Addr, cfg.Workers, cfg.QueueCap)
+	logger.Startup(cfg.Addr, cfg.Workers)
 	log.Fatal(http.ListenAndServe(cfg.Addr, r))
 }
