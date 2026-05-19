@@ -1,10 +1,11 @@
 package handler
 
 import (
-	"encoding/json"
+	"io"
 	"net/http"
 	"sync/atomic"
 
+	"github.com/bytedance/sonic"
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/logger"
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/model"
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/scoring"
@@ -85,7 +86,8 @@ func (h *FraudHandler) Ready(w http.ResponseWriter, r *http.Request) {
 
 func (h *FraudHandler) Score(w http.ResponseWriter, r *http.Request) {
 	var req model.FraudScoreRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil || sonic.Unmarshal(raw, &req) != nil {
 		respond(w, http.StatusBadRequest, map[string]string{"error": "body inválido"})
 		return
 	}

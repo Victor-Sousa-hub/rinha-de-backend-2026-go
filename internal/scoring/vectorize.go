@@ -1,9 +1,9 @@
 package scoring
 
 import (
-	"encoding/json"
 	"math"
 
+	"github.com/bytedance/sonic"
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/model"
 )
 
@@ -25,7 +25,7 @@ var mccRisk map[string]float64
 // e não pode receber dados injetados de fora do pacote — o embed precisa
 // estar no pacote que contém o arquivo físico (ver comentário em main.go).
 func LoadMCCRisk(data []byte) error {
-	return json.Unmarshal(data, &mccRisk)
+	return sonic.Unmarshal(data, &mccRisk)
 }
 
 func clamp(v float64) float64 {
