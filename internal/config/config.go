@@ -11,6 +11,7 @@ type Config struct {
 	Addr     string
 	Workers  int
 	QueueCap int
+	Nprobe   int
 }
 
 func Load() Config {
@@ -19,6 +20,7 @@ func Load() Config {
 		Addr:     str("ADDR", ":9999"),
 		Workers:  pos("WORKERS", 2),
 		QueueCap: pos("QUEUE_CAP", 64),
+		Nprobe:   pos("NPROBE", 2),
 	}
 }
 

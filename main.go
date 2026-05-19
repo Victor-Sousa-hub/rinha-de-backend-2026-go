@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("erro ao carregar mcc_risk.json: %v", err)
 	}
 
-	knn, err := scoring.NewKNN(refsBin, 5)
+	knn, err := scoring.NewKNN(refsBin, 5, cfg.Nprobe)
 	if err != nil {
 		log.Fatalf("erro ao carregar referências KNN: %v", err)
 	}

@@ -10,8 +10,9 @@ import (
 //
 // O dataset é pré-agrupado em K clusters (k-means, gerado offline pelo cmd/convert).
 // Cada query inspeciona apenas os nprobe clusters mais próximos, reduzindo comparações
-// de O(N) → O(K + nprobe×N/K): para N=3M, K=1000, nprobe=4 são ~12 000 vetores
-// em vez de 3M — speedup de ~250× sem perda significativa de recall.
+// de O(N) → O(K + nprobe×N/K): para N=3M, K=1000, nprobe=2 são ~6 000 vetores
+// em vez de 3M — speedup de ~500× sem perda significativa de recall.
+// nprobe é configurável via env NPROBE para facilitar benchmarks de recall vs latência.
 type KNN struct {
 	vectors   []float32 // N×14 flat row-major, ordenados por cluster
 	frauds    []byte    // N, ordenados por cluster
@@ -19,6 +20,7 @@ type KNN struct {
 	bounds    []int     // K+1: cluster c contém vectors[bounds[c]:bounds[c+1]]
 	n, k      int
 	numK      int
+	nprobe    int
 }
 
 // knnEntry é o elemento do buffer top-K dentro de Score.
@@ -34,11 +36,6 @@ type centPair struct {
 	idx int
 }
 
-// nprobe é o número de clusters inspecionados por query.
-// Trade-off recall vs latência: nprobe=4 com K=1000 busca ~12 000 vetores;
-// dobrar nprobe dobra a latência mas melhora o recall em casos de fronteira de cluster.
-const nprobe = 4
-
 // NewKNN decodifica o binário IVF gerado pelo cmd/convert.
 //
 // Formato esperado (little-endian):
@@ -48,7 +45,7 @@ const nprobe = 4
 //	[K × 56 bytes] — centroides [K][14]float32
 //	[K × 4 bytes]  — tamanho de cada cluster uint32
 //	[N × 57 bytes] — vetores ordenados por cluster: [14]float32 + 1 byte fraud
-func NewKNN(data []byte, k int) (*KNN, error) {
+func NewKNN(data []byte, k, nprobe int) (*KNN, error) {
 	if len(data) < 16 {
 		return nil, fmt.Errorf("dados insuficientes")
 	}
@@ -97,8 +94,10 @@ func NewKNN(data []byte, k int) (*KNN, error) {
 		n:         n,
 		k:         k,
 		numK:      numK,
+		nprobe:    nprobe,
 	}, nil
 }
+
 
 // Score retorna a proporção de vizinhos fraudulentos entre os K mais próximos.
 //
@@ -113,7 +112,7 @@ func (knn *KNN) Score(v [14]float64) float64 {
 		q[i] = float32(f)
 	}
 
-	clusters := nearestClusters(q, knn.centroids, knn.numK)
+	clusters := nearestClusters(q, knn.centroids, knn.numK, knn.nprobe)
 
 	buf := make([]knnEntry, 0, knn.k)
 	maxDSq := float32(math.MaxFloat32)
@@ -168,7 +167,7 @@ func (knn *KNN) Score(v [14]float64) float64 {
 // nearestClusters retorna os índices dos nprobe clusters mais próximos de q.
 // Usa distância euclidiana simples (sem sentinela) — adequado para seleção
 // aproximada: o recall final é garantido pela busca exata dentro dos clusters.
-func nearestClusters(q [14]float32, centroids []float32, numK int) []int {
+func nearestClusters(q [14]float32, centroids []float32, numK, nprobe int) []int {
 	buf := make([]centPair, 0, nprobe)
 	maxDSq := float32(math.MaxFloat32)
 	maxPos := 0
