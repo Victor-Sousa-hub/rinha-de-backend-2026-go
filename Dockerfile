@@ -17,19 +17,14 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
-# Cache mount: módulos baixados persistem entre builds — go mod download roda
-# só quando go.mod/go.sum mudam, não a cada docker build.
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
+RUN go mod download
 
 COPY . .
 # Copia o .bin gerado pelo converter, sobrescrevendo qualquer versão local.
 COPY --from=converter /app/resources/references.bin ./resources/references.bin
 
-# Cache mount: o build cache do Go persiste entre builds — recompila apenas
-# pacotes que mudaram, em vez de recompilar tudo do zero.
 # CGO_ENABLED=0 garante binário estático; GOARCH=amd64 exigido pela Rinha.
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o api .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o api .
 
 # --- final stage ---
 # alpine em vez de scratch para ter wget disponível no HEALTHCHECK.

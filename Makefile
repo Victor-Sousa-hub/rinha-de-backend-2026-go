@@ -20,7 +20,7 @@ test:
 # ── Docker (load balancer nginx + 2 instâncias) ────────────────────────────────
 
 docker-build:
-	DOCKER_BUILDKIT=1 docker compose up --build -d
+	docker compose up --build -d
 
 up:
 	docker compose up -d
