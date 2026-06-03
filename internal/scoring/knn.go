@@ -22,7 +22,7 @@ const (
 // em vez de 3M — speedup de ~500× sem perda significativa de recall.
 // nprobe é configurável via env NPROBE para facilitar benchmarks de recall vs latência.
 type KNN struct {
-	vectors   []float32 // N×14 flat row-major, ordenados por cluster
+	vectors   []uint8   // N×14 flat row-major, [0,254], 255=sentinela, ordenados por cluster
 	frauds    []byte    // N, ordenados por cluster
 	centroids []float32 // K×14 centroides IVF
 	bounds    []int     // K+1: cluster c contém vectors[bounds[c]:bounds[c+1]]
@@ -49,7 +49,7 @@ type centPair struct {
 //	[8 bytes]      uint64  — K clusters
 //	[K × 56 bytes] — centroides [K][14]float32
 //	[K × 4 bytes]  — tamanho de cada cluster uint32
-//	[N × 57 bytes] — vetores ordenados por cluster: [14]float32 + 1 byte fraud
+//	[N × 15 bytes] — vetores ordenados por cluster: [14]uint8 + 1 byte fraud
 func NewKNN(data []byte, k, nprobe int) (*KNN, error) {
 	if k > maxK {
 		return nil, fmt.Errorf("k=%d excede maxK=%d; ajuste a constante em knn.go", k, maxK)
@@ -64,7 +64,7 @@ func NewKNN(data []byte, k, nprobe int) (*KNN, error) {
 	n := int(binary.LittleEndian.Uint64(data[:8]))
 	numK := int(binary.LittleEndian.Uint64(data[8:16]))
 
-	const recSize = 14*4 + 1
+	const recSize = 14*1 + 1
 	centSize := numK * 14 * 4
 	sizeBytes := numK * 4
 	needed := 16 + centSize + sizeBytes + n*recSize
@@ -86,15 +86,15 @@ func NewKNN(data []byte, k, nprobe int) (*KNN, error) {
 		off += 4
 	}
 
-	vectors := make([]float32, n*14)
+	vectors := make([]uint8, n*14)
 	frauds := make([]byte, n)
 	body := data[off:]
 	for i := range n {
 		rec := body[i*recSize:]
 		for j := range 14 {
-			vectors[i*14+j] = math.Float32frombits(binary.LittleEndian.Uint32(rec[j*4:]))
+			vectors[i*14+j] = rec[j]
 		}
-		frauds[i] = rec[56]
+		frauds[i] = rec[14]
 	}
 
 	return &KNN{
@@ -117,9 +117,22 @@ func NewKNN(data []byte, k, nprobe int) (*KNN, error) {
 //  2. Brute-force top-K dentro desses clusters com sentinela para ausência —
 //     array [maxK]knnEntry no stack, idem.
 func (knn *KNN) Score(v [14]float64) float64 {
-	var q [14]float32
+	// qf para comparar com centroides (float32); qu para comparar com vetores
+	// quantizados (uint8). Dois vetores de query evitam converter centroides para
+	// uint8, o que introduziria erro de quantização na fase de roteamento IVF.
+	var qf [14]float32
+	var qu [14]uint8
 	for i, f := range v {
-		q[i] = float32(f)
+		qf[i] = float32(f)
+		if f < 0 {
+			qu[i] = 255
+		} else {
+			val := f * 254.0
+			if val > 254 {
+				val = 254
+			}
+			qu[i] = uint8(val + 0.5)
+		}
 	}
 
 	// Fase 1: nprobe clusters mais próximos — stack-allocated.
@@ -132,7 +145,7 @@ func (knn *KNN) Score(v [14]float64) float64 {
 	for c := range knn.numK {
 		var dSq float32
 		for j := range 14 {
-			d := q[j] - knn.centroids[c*14+j]
+			d := qf[j] - knn.centroids[c*14+j]
 			dSq += d * d
 		}
 		if cLen < np {
@@ -165,14 +178,16 @@ func (knn *KNN) Score(v [14]float64) float64 {
 			base := i * 14
 			var dSq float32
 			for j := range 14 {
-				a, b := q[j], vecs[base+j]
-				if a < 0 || b < 0 {
+				a, b := qu[j], vecs[base+j]
+				if a == 255 || b == 255 {
 					if a != b {
-						dSq += 1
+						dSq += 1.0
 					}
 					continue
 				}
-				d := a - b
+				af := float32(a) / 254.0
+				bf := float32(b) / 254.0
+				d := af - bf
 				dSq += d * d
 			}
 			if tLen < knn.k {
