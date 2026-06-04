@@ -6,7 +6,7 @@
 //	[8 bytes]      uint64  — K clusters
 //	[K × 56 bytes] — centroides [K][14]float32
 //	[K × 4 bytes]  — tamanho de cada cluster uint32
-//	[N × 57 bytes] — vetores ordenados por cluster: [14]float32 + 1 byte fraud
+//	[N × 15 bytes] — vetores ordenados por cluster: [14]uint8 + 1 byte fraud
 //
 // A estrutura IVF (Inverted File Index) agrupa os N vetores em K clusters via
 // k-means offline. Em runtime, Score() busca apenas nos nprobe clusters mais
@@ -126,13 +126,13 @@ func main() {
 		w.Write(sf[:])
 	}
 
-	var rec [57]byte
+	var rec [15]byte
 	for _, idx := range order {
 		base := idx * 14
 		for j := range 14 {
-			binary.LittleEndian.PutUint32(rec[j*4:], math.Float32bits(vecs[base+j]))
+			rec[j] = quantize(vecs[base+j])
 		}
-		rec[56] = frauds[idx]
+		rec[14] = frauds[idx]
 		w.Write(rec[:])
 	}
 
@@ -143,6 +143,20 @@ func main() {
 	info, _ := out.Stat()
 	log.Printf("OK: %d registros, K=%d → resources/references.bin (%.0f MB) em %s",
 		n, kClusters, float64(info.Size())/(1<<20), time.Since(start))
+}
+
+// quantize mapeia float32 [0,1] → uint8 [0,254]; sentinela -1 → 255.
+// 255 reservado para features ausentes preserva a semântica do sentinela float sem
+// custo extra de bit: na distância, par (255,255) contribui 0 e par (255,x) contribui 1.
+func quantize(v float32) uint8 {
+	if v < 0 {
+		return 255
+	}
+	q := v * 254.0
+	if q > 254 {
+		q = 254
+	}
+	return uint8(q + 0.5)
 }
 
 // buildCentroids executa o algoritmo de Lloyd em um sample aleatório dos vetores.
