@@ -1,5 +1,7 @@
 tmp/
 bin/
+Makefile
+scripts/
 .env
 resources/references.bin
 test/test-data.json
