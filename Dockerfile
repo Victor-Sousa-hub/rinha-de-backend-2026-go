@@ -35,5 +35,9 @@ COPY --from=builder /app/api /api
 HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:9999/ready || exit 1
 
+# GOMAXPROCS=1: com UDS, um único OS thread elimina contention de scheduler.
+# GOGC=off: sem pauses de GC; GOMEMLIMIT=140MiB atua como safety net.
+ENV WORKERS=4 GOMAXPROCS=1 GOGC=off GOMEMLIMIT=140MiB
+
 EXPOSE 9999
 ENTRYPOINT ["/api"]
