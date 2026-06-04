@@ -121,6 +121,15 @@ approved    = fraud_score < 0.7
 - **Docker Compose** obrigatório; imagens linux/amd64 públicas
 - Rede em modo bridge
 
+## Configuração de Runtime (ponto ótimo empírico)
+
+| Variável      | Valor | Motivo                                                                 |
+|---------------|-------|------------------------------------------------------------------------|
+| `WORKERS`     | `4`   | Minimiza p99; verificado empiricamente                                 |
+| `GOMAXPROCS`  | `4`   | Permite paralelismo real nos chunks do KNN; padrão Go seria 1 no cgroup |
+
+Não alterar esses valores sem nova bateria de testes de carga. Definidos como `ENV` no Dockerfile e como variáveis de ambiente em `api1`/`api2` no `docker-compose.yml`.
+
 ---
 
 ## Pontuação (máximo ±6000 pts)
