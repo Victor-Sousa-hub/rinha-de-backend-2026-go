@@ -234,6 +234,27 @@ func TestComposeCPULimit(t *testing.T) {
 	}
 }
 
+// TestComposeCPUDeclarationStyle verifica se os limites de CPU usam o campo
+// deploy.resources.limits.cpus, que é o formato padrão da spec do Compose.
+//
+// cpu_period/cpu_quota também limitam CPU via cgroup e são funcionalmente
+// equivalentes, mas definem NanoCpus=0 no docker inspect — avaliadores que
+// checarem esse campo não reconhecerão o limite. O teste falha para sinalizar
+// o risco; se a decisão de manter cpu_period (menor período CFS = p99 melhor)
+// for intencional, este teste pode ser removido após validação com o avaliador.
+func TestComposeCPUDeclarationStyle(t *testing.T) {
+	c := loadCompose(t)
+	for name, svc := range c.Services {
+		if svc.Deploy.Resources.Limits.CPUs == "" {
+			method := "nenhum limite declarado"
+			if svc.CPUPeriod > 0 && svc.CPUQuota > 0 {
+				method = fmt.Sprintf("cpu_period=%d + cpu_quota=%d (NanoCpus=0 no docker inspect)", svc.CPUPeriod, svc.CPUQuota)
+			}
+			t.Errorf("serviço %q usa %s em vez de deploy.resources.limits.cpus — avaliadores que checarem NanoCpus não reconhecerão o limite", name, method)
+		}
+	}
+}
+
 func TestComposeMemoryLimit(t *testing.T) {
 	c := loadCompose(t)
 	var totalBytes int64
