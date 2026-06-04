@@ -4,10 +4,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/bytedance/sonic"
-	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/logger"
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/model"
 	"github.com/Victor-Sousa-hub/rinha-de-backend-2026-go/internal/scoring"
+	"github.com/bytedance/sonic"
 )
 
 // FraudHandler usa um semáforo para limitar o paralelismo do KNN sem trocar
@@ -38,7 +37,7 @@ type readyResponse struct {
 
 func (h *FraudHandler) Ready(w http.ResponseWriter, r *http.Request) {
 	active := len(h.sem)
-	logger.Ready(active, h.workers)
+	// logger.Ready(active, h.workers)
 
 	status := http.StatusOK
 	if active >= h.workers {
@@ -80,7 +79,7 @@ func (h *FraudHandler) Score(w http.ResponseWriter, r *http.Request) {
 	<-h.sem
 
 	respond(w, http.StatusOK, model.FraudScoreResponse{
-		Approved:   score < 0.7,
+		Approved:   score < 0.5,
 		FraudScore: score,
 	})
 }
